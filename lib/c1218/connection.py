@@ -139,10 +139,33 @@ class ConnectionBase(object):
 		elif self.toggle_control and not isinstance(data, C1218Packet):
 			self.loggerio.warning('toggle bit is on but the data is not a C1218Packet instance')
 		data = data.build()
-		self.loggerio.debug("sending frame,  length: {0:<3} data: {1}".format(len(data), binascii.b2a_hex(data).decode('utf-8')))
+		self.loggerio.debug("sending framea,  length: {0:<3} data: {1}".format(len(data), binascii.b2a_hex(data).decode('utf-8')))
 		for pktcount in range(0, 3):
 			self.write(data)
 			response = self.serial_h.read(1)
+
+			# skip an echo, assuming there always is one, but there might or might not be a nack or ack
+			if len(response)>=1:
+				if response[0]==data[0]:
+					response2 = self.serial_h.read(len(data))
+					response2 = response + response2
+					if response[:len(data)] == data:
+						self.loggerio.debug("got a duplicate of the data, skipping")
+						response = response2[len(data):]
+					else:
+						response = response2[len(data):]
+						self.loggerio.warning("got a first byte match but not the rest.  Skipping but this is suspect...: "  + str(response2[:len(data)]))
+				elif response == NACK or response == ACK:
+					response2 = self.serial_h.read(len(data))
+					if response2 == data:
+						self.loggerio.debug("got a duplicate of the data after (n)ack, skipping")
+					else:
+						self.loggerio.warning("got an ack/nack but the rest doesn't match the data.  Might have ruined the stream!: "  + str(response2))
+				else:
+					self.loggerio.warning("no echo seen, assuming it is missing but this is suspect")
+
+
+
 			if response == NACK:
 				self.loggerio.warning('received a NACK after writing data')
 				time.sleep(0.10)
@@ -152,6 +175,7 @@ class ConnectionBase(object):
 			elif response != ACK:
 				self.loggerio.error('received unknown response: ' + hex(ord(response)) + ' after writing data')
 			else:
+				self.loggerio.debug("got ACK")
 				return
 		self.loggerio.critical('failed 3 times to correctly send a frame')
 		raise C1218IOError('failed 3 times to correctly send a frame')
