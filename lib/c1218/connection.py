@@ -162,7 +162,12 @@ class ConnectionBase(object):
 					else:
 						self.loggerio.warning("got an ack/nack but the rest doesn't match the data.  Might have ruined the stream!: "  + str(response2))
 				else:
-					self.loggerio.warning("no echo seen, assuming it is missing but this is suspect")
+					response2 = self.serial_h.read(len(data))
+					if len(response2) == len(data):
+						self.loggerio.warning("got a response at least as long as the data, but it doesn't match.  "  + str(response2))
+						response = response2[-1:]
+					else:
+						self.loggerio.warning("no echo seen, assuming it is missing but this is suspect")
 
 
 
